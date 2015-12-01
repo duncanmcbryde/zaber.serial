@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: zaber.serial
-Version: 0.7
+Version: 0.8.dev
 Summary: A library for communicating with Zaber devices
 Home-page: http://www.zaber.com/support/docs/api/core-python/
 Author: Zaber Technologies Inc.

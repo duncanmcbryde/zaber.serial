@@ -8,7 +8,7 @@ def read_from_file(*filename):
 
 setup(
     name = 'zaber.serial',
-    version = '0.7',
+    version = '0.8.dev',
     packages = find_packages(exclude=["test*", "test_*", "*_test*"]),
     description = 'A library for communicating with Zaber devices',
     long_description = read_from_file('DESCRIPTION.rst'),
