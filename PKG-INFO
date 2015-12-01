@@ -1,0 +1,32 @@
+Metadata-Version: 1.1
+Name: zaber.serial
+Version: 0.7
+Summary: A library for communicating with Zaber devices
+Home-page: http://www.zaber.com/support/docs/api/core-python/
+Author: Zaber Technologies Inc.
+Author-email: contact@zaber.com
+License: Apache Software License v2.0
+Description: Zaber Python Serial Library
+        ===========================
+        
+        The Zaber Serial Library is a small Python library for communicating
+        with Zaber devices over a serial port. It is built on top of
+        `PySerial`_.
+        
+        The library is compatible with Python 2.7 and 3.4. It is released under
+        the `Apache License`_.
+        
+        .. _`PySerial`: http://pyserial.sourceforge.net/index.html
+        .. _`Apache License`: http://apache.org/licenses/LICENSE-2.0
+        
+        
+Keywords: serial zaber
+Platform: UNKNOWN
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Programming Language :: Python :: 2
+Classifier: Programming Language :: Python :: 2.7
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.4
