@@ -13,6 +13,7 @@ from .exceptions import TimeoutError, UnexpectedReplyError
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
+
 class AsciiAxis(object):
     """Represents one axis of an ASCII device.
     
@@ -22,11 +23,12 @@ class AsciiAxis(object):
         number: The number of this axis. 1-9.
     """
 
-    def __init__(self, device, number):
+    def __init__(self, device, number, lockstep=False):
         """
         Args:
             device: An AsciiDevice which is the parent of this axis.
             number: The number of this axis. Must be 1-9.
+            lockstep: True if the axis is locked to another axis.
 
         Raises:
             ValueError: The axis number was not between 1 and 9.
@@ -35,6 +37,8 @@ class AsciiAxis(object):
             raise ValueError("Axis number must be between 1 and 9.")
         self.number = number
         self.parent = device
+        self.lockstep = lockstep
+
 
     def send(self, message):
         """Sends a message to the axis and then waits for a reply.
@@ -77,13 +81,14 @@ class AsciiAxis(object):
         Returns: An AsciiReply object containing the reply received.
         """
         if isinstance(message, (str, bytes)):
-            message = AsciiCommand(message)
+            message = AsciiCommand(message, lockstep = self.lockstep)
 
         # Always send the AsciiCommand to *this* axis.
         message.axis_number = self.number
 
+
         reply = self.parent.send(message)
-        if reply.axis_number != self.number:
+        if reply.axis_number != self.number and self.lockstep == False:
             raise UnexpectedReplyError("Received a reply from an "
                     "unexpected axis: axis {}".format(reply.axis_number),
                     reply)
@@ -222,6 +227,27 @@ class AsciiAxis(object):
         """
         return self.parent.poll_until_idle(self.number)
 
+    def get_pos(self):
+        """Get the position of the axis in microsteps.
+        Note that this contains a fudge for working with a lockstepped axis.
+        A lockstepped axis does not return a position, we need to select
+        one of the axes to request a position.
+        So we unset the lockstep attribute and ask the first axis.
+
+        Raises:
+            UnexpectedReplyError: The reply received was not sent by the
+                expected device and axis.
+
+        Returns: An AsciiReply object containing the position in microsteps
+        """
+        if self.lockstep == True:
+            self.lockstep = False
+            reply = self.send("get pos")
+            self.lockstep = True
+        else:
+            reply = self.send("get pos")
+        return reply
+
 class AsciiCommand(object):
     """Models a single command in Zaber's ASCII protocol.
 
@@ -244,7 +270,7 @@ class AsciiCommand(object):
             whether a device is busy or idle.
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         r"""
         Args:
             *args: A number of arguments beginning with 0 to 3 integers
@@ -290,7 +316,10 @@ class AsciiCommand(object):
         """
         self.data = ''
         attributes = iter(["device_address", "axis_number", "message_id"])
-        for arg in args:
+        if 'lockstep' in kwargs:
+            if kwargs['lockstep']  == True:
+                setattr(self, 'lockstep', 'lockstep')
+        for i, arg in enumerate(args):
             if isinstance(arg, int):
                 try: 
                     # If self.data has got something in it,
@@ -298,6 +327,7 @@ class AsciiCommand(object):
                     if self.data: raise StopIteration
                     next_attr = next(attributes)
                     setattr(self, next_attr, arg)
+
                 except StopIteration:
                     self.data = ' '.join([self.data, str(arg)]) if self.data \
                             else str(arg)
@@ -309,7 +339,6 @@ class AsciiCommand(object):
                 # Trim leading '/' and trailing "\r\n".
                 arg = arg.lstrip('/')
                 arg = arg.rstrip('\r\n')
-
                 tokens = arg.split(' ')
                 for i, token in enumerate(tokens):
                     try: 
@@ -335,6 +364,8 @@ class AsciiCommand(object):
         if not hasattr(self, "device_address"): self.device_address = 0 
         if not hasattr(self, "axis_number"): self.axis_number = 0
         if not hasattr(self, "message_id"): self.message_id = None
+        if not hasattr(self, "lockstep"): self.lockstep = ''
+
 
     def encode(self):
         """Return a valid ASCII command based on this object's 
@@ -348,24 +379,28 @@ class AsciiCommand(object):
         """
         if self.message_id is not None:
             if self.data:
-                return "/{0:d} {1:d} {2:d} {3:s}\r\n".format(
+                return "/{0:d} {4:s} {1:d} {2:d} {3:s}\r\n".format(
                         self.device_address, 
                         self.axis_number,
                         self.message_id, 
-                        self.data).encode()
-            else: return "/{0:d} {1:d} {2:d}\r\n".format(
+                        self.data,
+                        self.lockstep).encode()
+            else: return "/{0:d} {3:s} {1:d} {2:d}\r\n".format(
                     self.device_address,
                     self.axis_number, 
-                    self.message_id).encode()
+                    self.message_id,
+                    self.lockstep).encode()
 
         if self.data:
-            return "/{0:d} {1:d} {2:s}\r\n".format(
+            return "/{0:d} {3:s} {1:d} {2:s}\r\n".format(
                     self.device_address,
                     self.axis_number, 
-                    self.data).encode()
-        else: return "/{0:d} {1:d}\r\n".format(
+                    self.data,
+                    self.lockstep).encode()
+        else: return "/{0:d} {2:s} {1:d}\r\n".format(
                 self.device_address,
-                self.axis_number).encode()
+                self.axis_number,
+                self.lockstep).encode()
 
     def __str__(self):
         """Returns an encoded ASCII command, without the newline
@@ -390,7 +425,7 @@ class AsciiDevice(object):
         address: The address of this device. 1-99.
     """
 
-    def __init__(self, port, address):
+    def __init__(self, port, address, lockstep=False):
         """
         Args:
             port: An AsciiSerial object representing the port to which
@@ -405,6 +440,7 @@ class AsciiDevice(object):
             raise ValueError("Address must be between 1 and 99.")
         self.address = address
         self.port = port
+        self.lockstep = lockstep
 
     def axis(self, number):
         """Returns an AsciiAxis with this device as a parent and the
@@ -423,7 +459,7 @@ class AsciiDevice(object):
         Returns:
             A new AsciiAxis instance to represent the axis specified.
         """
-        return AsciiAxis(self, number)
+        return AsciiAxis(self, number, lockstep=self.lockstep)
 
     def send(self, message):
         r"""Sends a message to the device, then waits for a reply.
@@ -456,13 +492,13 @@ class AsciiDevice(object):
 
         # Always send an AsciiCommand to *this* device.
         message.device_address = self.address
-
         self.port.write(message)
 
         reply = self.port.read()
-        if (reply.device_address != self.address
-            or reply.axis_number != message.axis_number
-            or reply.message_id != message.message_id):
+        if (self.lockstep == False
+            and ( reply.device_address != self.address
+                or reply.axis_number != message.axis_number
+                or reply.message_id != message.message_id)):
             raise UnexpectedReplyError("Received an unexpected reply from "
                     "device with address {0:d}, axis {1:d}".format(
                         reply.device_address, reply.axis_number),
@@ -657,7 +693,6 @@ class AsciiReply(object):
             CII_Protocol_Manual
         """
         reply_string = reply_string.strip("\r\n")
-
         if len(reply_string) < 5:
             raise ValueError("Reply string too short to be a valid reply.")
 
